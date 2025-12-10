@@ -26,28 +26,20 @@ n8n-secops-lab/
 
 ### 1. สร้าง Environment Variable (.env)
 
-สร้างไฟล์ `.env` ในโฟลเดอร์ root ของโปรเจค โดยมีตัวแปรดังนี้:
+คัดลอกไฟล์ `.env.example` เป็น `.env` และแก้ไขค่าตามต้องการ:
 
 ```bash
-# n8n Configuration
-N8N_HOST=localhost
-N8N_PORT=5678
-N8N_USER=admin
-N8N_PASS=your_secure_password_here
-WEBHOOK_URL=http://localhost:5678/
-
-# Database Configuration
-DB_NAME=n8n
-DB_USER=n8n_user
-DB_PASS=your_db_password_here
-
-# Cloudflare Tunnel (Optional - สำหรับเปิด n8n ผ่าน Internet)
-CF_TUNNEL_TOKEN=your_cloudflare_tunnel_token_here
+cp .env.example .env
 ```
 
+จากนั้นแก้ไขไฟล์ `.env` และเปลี่ยนค่าตัวแปรต่อไปนี้:
+- `N8N_PASS`: รหัสผ่านสำหรับเข้าสู่ระบบ n8n
+- `DB_PASS`: รหัสผ่านสำหรับ PostgreSQL database
+- `CF_TUNNEL_TOKEN`: Token สำหรับ Cloudflare Tunnel (เว้นว่างไว้ได้หากไม่ใช้)
+
 **หมายเหตุ**: 
-- เปลี่ยน `N8N_PASS` และ `DB_PASS` เป็นรหัสผ่านที่ปลอดภัย
-- หากใช้ Cloudflare Tunnel ให้ใส่ `CF_TUNNEL_TOKEN` มิฉะนั้นสามารถเว้นว่างไว้ได้
+- ไฟล์ `.env` จะไม่ถูก commit ขึ้น GitHub เพื่อความปลอดภัย
+- ดูรายละเอียดตัวแปรทั้งหมดได้ในไฟล์ `.env.example`
 
 ### 2. สร้าง Custom Docker Image (Dockerfile)
 
