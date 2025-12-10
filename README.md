@@ -184,16 +184,25 @@ docker logs n8n-secops
 
 มี Workflow ตัวอย่างสำหรับ SecOps Demo พร้อมใช้งาน:
 
-- **ไฟล์**: `secops-workflow.json` - Workflow สำหรับ Automated Vulnerability Detection
+- **ไฟล์**: `secops-workflow.json` - Workflow สำหรับ Automated Vulnerability Detection with AI
 - **คู่มือ**: `WORKFLOW_GUIDE.md` - คู่มือการใช้งานและตั้งค่า Workflow
 
 ### ฟีเจอร์ของ Workflow:
-1. รับคำสั่งจาก Line OA Webhook
-2. สแกน Port ด้วย Nmap
-3. สแกนช่องโหว่ด้วย Nuclei
-4. วิเคราะห์ผลลัพธ์ด้วย AI (OpenAI)
-5. ตรวจสอบช่องโหว่ด้วย curl command
-6. ส่งแจ้งเตือนไปยัง Line Notify
+1. **รับคำสั่งจาก Line Messaging API** - รับข้อความ natural language ผ่าน Line Bot
+2. **AI-Powered Nmap Command Generation** - ใช้ AI แปลงคำสั่งภาษาไทย/อังกฤษเป็น nmap command
+3. **Port Scanning** - สแกน Port ด้วย Nmap และ Parse ผลลัพธ์เป็น XML
+4. **Automated Target Preparation** - แปลงผลลัพธ์ Nmap เป็น URL targets สำหรับ Nuclei อัตโนมัติ
+5. **Vulnerability Scanning** - สแกนช่องโหว่ด้วย Nuclei (เฉพาะ tags: exposure)
+6. **AI-Powered Report Generation** - ใช้ AI สร้างรายงานสรุปผลการสแกนเป็นภาษาไทย
+7. **Line Messaging Response** - ส่งรายงานกลับไปยัง Line Messenger
+
+### ตัวอย่างการใช้งาน:
+ส่งข้อความผ่าน Line Bot:
+- "สแกนพอร์ตเว็บเครื่อง victim-app แบบด่วน"
+- "Full scan on victim-app"
+- "สแกนพอร์ต 80, 443, 8080 ของ victim-app"
+
+AI จะแปลงคำสั่งเป็น nmap command และ workflow จะทำงานต่ออัตโนมัติ
 
 ดูรายละเอียดเพิ่มเติมใน `WORKFLOW_GUIDE.md`
 
