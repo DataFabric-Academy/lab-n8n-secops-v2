@@ -1,0 +1,457 @@
+{
+  "name": "SecOps Demo - Automated Vulnerability Detection",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "secops-scan",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-line-oa",
+      "name": "Line OA Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "secops-scan"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2400, 300]
+    },
+    {
+      "parameters": {
+        "command": "nmap -sV -sC -p- victim-app -oN - 2>/dev/null | grep -E '^[0-9]+/(tcp|udp)' | awk '{print $1}' | cut -d'/' -f1"
+      },
+      "id": "nmap-scan",
+      "name": "1. Nmap Port Scan",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Nmap output and extract ports\nconst nmapOutput = $input.item.json.stdout || $input.item.json.stderr || '';\nconst ports = nmapOutput.trim().split('\\n').filter(port => port && !isNaN(port));\n\n// Default ports if none found\nconst defaultPorts = ['80', '8080'];\nconst foundPorts = ports.length > 0 ? ports : defaultPorts;\n\n// Create items for each port\nconst items = foundPorts.map(port => ({\n  json: {\n    port: port.trim(),\n    target: 'http://victim-app',\n    targetUrl: `http://victim-app:${port.trim()}`\n  }\n}));\n\nreturn items;"
+      },
+      "id": "parse-ports",
+      "name": "2. Parse Ports",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "command": "nuclei -u {{ $json.targetUrl }} -json -silent 2>/dev/null || echo '[]'"
+      },
+      "id": "nuclei-scan",
+      "name": "3. Nuclei Scan",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Nuclei JSON output (may contain multiple JSON objects, one per line)\nconst nucleiOutput = $input.item.json.stdout || '';\nconst lines = nucleiOutput.trim().split('\\n').filter(line => line.trim());\n\nlet vulnerabilities = [];\nif (lines.length > 0) {\n  try {\n    // Try to parse as JSON array or individual JSON objects\n    vulnerabilities = lines.map(line => {\n      try {\n        return JSON.parse(line);\n      } catch (e) {\n        return null;\n      }\n    }).filter(v => v !== null);\n  } catch (e) {\n    // If parsing fails, return empty array\n    vulnerabilities = [];\n  }\n}\n\n// Always return at least one item, even if no vulnerabilities found\nif (vulnerabilities.length === 0) {\n  return [{\n    json: {\n      ...$input.item.json,\n      nucleiOutput: nucleiOutput,\n      vulnerabilities: [],\n      vulnerability: null\n    }\n  }];\n}\n\n// Combine with original data\nreturn vulnerabilities.map(vuln => ({\n  json: {\n    ...$input.item.json,\n    nucleiOutput: nucleiOutput,\n    vulnerabilities: vulnerabilities,\n    vulnerability: vuln\n  }\n}));"
+      },
+      "id": "parse-nuclei",
+      "name": "4. Parse Nuclei Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "nuclei-json",
+              "name": "nucleiJson",
+              "value": "={{ JSON.stringify($json.vulnerabilities || []) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-ai-input",
+      "name": "5. Prepare AI Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "create",
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 500
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Role: You are a Senior Penetration Tester and Security Automation Expert.\n\nTask: Analyze the provided vulnerability scan logs (from Nuclei/Nmap).\n\n1. Identify if there is a \"High\" or \"Critical\" vulnerability related to exposed sensitive files (like .env, .git, backup files, config files).\n2. If found, generate a specific `curl` command to verify existence of that file.\n3. If not found or looks like a False Positive, mark as safe.\n\nOutput Format: STRICTLY JSON Object only. No markdown, no conversation.\n\n{\n  \"vulnerability_found\": boolean,\n  \"vulnerability_name\": \"string (e.g., Exposed .env file)\",\n  \"risk_level\": \"string\",\n  \"verification_command\": \"string (The curl command, e.g., curl -s -o /dev/null -w '%{http_code}' http://target/.env)\",\n  \"explanation\": \"string (Short reasoning in Thai)\"\n}"
+            },
+            {
+              "role": "user",
+              "content": "=Analyze this vulnerability scan output:\n\n{{ $json.nucleiJson }}\n\nTarget: {{ $json.targetUrl }}"
+            }
+          ]
+        }
+      },
+      "id": "ai-analyst",
+      "name": "6. AI Analyst",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.3,
+      "position": [1560, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-api",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract JSON from AI response\n// OpenAI node returns response in choices[0].message.content\nconst aiResponse = $input.item.json.choices?.[0]?.message?.content || \n                   $input.item.json.response || \n                   $input.item.json.message || \n                   $input.item.json.content || \n                   '';\n\n// Try to extract JSON from the response (might be wrapped in markdown)\nlet aiJson = null;\ntry {\n  // Remove markdown code blocks if present\n  let cleaned = aiResponse.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  \n  // Try to find JSON object in the response\n  const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    aiJson = JSON.parse(jsonMatch[0]);\n  } else {\n    aiJson = JSON.parse(cleaned);\n  }\n} catch (e) {\n  // If parsing fails, create default safe response\n  aiJson = {\n    vulnerability_found: false,\n    vulnerability_name: \"No vulnerability detected\",\n    risk_level: \"None\",\n    verification_command: \"\",\n    explanation: \"ไม่พบช่องโหว่หรือเป็น False Positive\"\n  };\n}\n\n// Combine with original data\nreturn [{\n  json: {\n    ...$input.item.json,\n    aiAnalysis: aiJson\n  }\n}];"
+      },
+      "id": "parse-ai-response",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-vulnerability",
+              "leftValue": "={{ $json.aiAnalysis.vulnerability_found }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-vulnerability-found",
+      "name": "Check Vulnerability Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.aiAnalysis.verification_command }}"
+      },
+      "id": "validation-loop",
+      "name": "7. Validation Loop",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2220, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-200",
+              "leftValue": "={{ $json.stdout.trim() }}",
+              "rightValue": "200",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-curl-result",
+      "name": "Check Curl Result",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2440, 200]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "url": "https://notify-api.line.me/api/notify",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.LINE_NOTIFY_TOKEN }}"
+            }
+          ]
+        },
+        "sendQuery": false,
+        "httpMethod": "POST",
+        "contentType": "form-urlencoded",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "=🚨 CRITICAL VULNERABILITY CONFIRMED\n\nTarget: {{ $json.targetUrl }}\nIssue: {{ $json.aiAnalysis.vulnerability_name }} (AI Verified)\nRisk Level: {{ $json.aiAnalysis.risk_level }}\nImpact: {{ $json.aiAnalysis.explanation }}\n\nFix: Please delete exposed file immediately!"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "line-notify",
+      "name": "8. Line Notify Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2660, 100]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "safe-message",
+              "name": "message",
+              "value": "=✅ Security Scan Complete\\n\\nTarget: {{ $json.targetUrl }}\\nStatus: No critical vulnerabilities found or False Positive detected",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "safe-status",
+      "name": "Safe Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2220, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "false-positive-message",
+              "name": "message",
+              "value": "=⚠️ False Positive Detected\\n\\nTarget: {{ $json.targetUrl }}\\nAI detected vulnerability but verification returned 404 (False Positive)",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "false-positive",
+      "name": "False Positive",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2440, 400]
+    }
+  ],
+  "connections": {
+    "Line OA Webhook": {
+      "main": [
+        [
+          {
+            "node": "1. Nmap Port Scan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Nmap Port Scan": {
+      "main": [
+        [
+          {
+            "node": "2. Parse Ports",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Parse Ports": {
+      "main": [
+        [
+          {
+            "node": "3. Nuclei Scan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Nuclei Scan": {
+      "main": [
+        [
+          {
+            "node": "4. Parse Nuclei Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Parse Nuclei Output": {
+      "main": [
+        [
+          {
+            "node": "5. Prepare AI Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Prepare AI Input": {
+      "main": [
+        [
+          {
+            "node": "6. AI Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. AI Analyst": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Check Vulnerability Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Vulnerability Found": {
+      "main": [
+        [
+          {
+            "node": "7. Validation Loop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Safe Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Validation Loop": {
+      "main": [
+        [
+          {
+            "node": "Check Curl Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Curl Result": {
+      "main": [
+        [
+          {
+            "node": "8. Line Notify Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "False Positive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Line Notify Alert": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Safe Status": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "False Positive": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
+
