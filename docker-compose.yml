@@ -29,6 +29,9 @@ services:
       - DB_POSTGRESDB_PASSWORD=${DB_PASS}
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
       - GENERIC_TIMEZONE=Asia/Bangkok
+      # Fix for Cloudflare Tunnel/Proxy
+      - N8N_PROXY_HOPS=1
+      - N8N_SECURE_COOKIE=false
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:

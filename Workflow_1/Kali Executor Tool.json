@@ -1,0 +1,66 @@
+{
+  "name": "Kali Executor Tool",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "id1",
+      "name": "Trigger",
+      "position": [
+        112,
+        240
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "command": "={{ $json.query }}"
+      },
+      "id": "id2",
+      "name": "SSH",
+      "position": [
+        304,
+        240
+      ],
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "credentials": {
+        "sshPassword": {
+          "id": "6XLzwt9RsxMlEqJc",
+          "name": "SSH Password account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Trigger": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "SSH",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "50c1d4a4-b5c5-4f02-b51e-32726d5232d9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "edec80f3ed858acedcbb127655268fbb6d64005c5562de14e0c198f90ecf25cb"
+  },
+  "id": "kyIfEMtAYWubjxWY",
+  "tags": []
+}

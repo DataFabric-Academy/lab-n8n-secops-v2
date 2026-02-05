@@ -1,0 +1,280 @@
+{
+  "name": "Advanced SecOps AI Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "id1",
+      "name": "Trigger",
+      "position": [
+        0,
+        240
+      ],
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "webhookId": "f38cc25a-9014-4d20-9db9-26fe1d8c8a03"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are the **Lead Security Orchestrator** running the **WebSecScan Pro 2026** protocol.\nYour mission is to execute a multi-stage security assessment by simulating the logic of specialized sub-agents.\n\n**Tools Available:**\n1. `nmap`: Port & Service discovery (Recon Agent).\n2. `nuclei`: Vulnerability scanning (Scanning Agents).\n3. `msfconsole`: Exploit verification (Attack Agent).\n\n**Operational Phases (Execute Sequentially):**\n\n**Phase 1: Deep Recon & Context (Agent 0 Logic)**\n-   **Action:** Run `nmap -sV -F <target>` to detect services/versions.\n-   **Analysis:** Identify Tech Stack (CMS, Frameworks) and determine OWASP ASVS Level (default Level 1 for public apps).\n\n**Phase 2: Vulnerability Assessment (Agents 1-4 Logic)**\n-   **Action:**\n    -   Web (80/443): Run `nuclei -u http://<target>:<port>`.\n    -   Database/FTP/Misc: Check for known CVEs.\n-   **Focus:** OWASP Top 10 (Injection, Broken Auth, Misconfig).\n\n**Phase 3: Exploitation Verification (Agent 5 Logic)**\n-   **Criteria:** If a High/Critical CVE is found.\n-   **Action:** ATTEMPT validation using `msfconsole`.\n    -   Command: `msfconsole -q -x \"use <module>; set RHOSTS <target>; check; exit\"`\n    -   *Note: Use 'check' mode only to avoid crashing targets.*\n\n**Phase 4: Correlation & Reporting (Agent 6 Logic)**\n-   **Action:** Synthesize findings.\n-   **CRITICAL FINAL OUTPUT:** You MUST output a **Single JSON object** containing:\n    1.  `target`: Target IP/URL.\n    2.  `asvs_level`: Estimated ASVS Level (1, 2, or 3).\n    3.  `tech_stack`: Detected technologies.\n    4.  `findings`: Array of vulnerabilities, each with:\n        -   `name`: Vulnerability Name.\n        -   `severity`: Critical/High/Medium/Low.\n        -   `owasp_category`: e.g., \"A01: Broken Access Control\".\n        -   `attack_chain`: (Optional) How this enables further attacks.\n        -   `verification`: \"Verified\" or \"Potential\".\n    5.  `summary`: Executive summary of the risk posture.\n\n**Constraints:**\n-   Do not ask for permission. EXECUTE the commands.\n-   Stop after 3 major tool executions.\n-   Output strictly JSON. Do not include markdown text outside the JSON."
+        }
+      },
+      "id": "id2",
+      "name": "Orchestrator",
+      "position": [
+        256,
+        240
+      ],
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1
+    },
+    {
+      "parameters": {
+        "description": "Execute bash commands (nmap, nuclei, msfconsole). Return stdout.",
+        "workflowId": {
+          "__rl": true,
+          "value": "kyIfEMtAYWubjxWY",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/kyIfEMtAYWubjxWY",
+          "cachedResultName": "Kali Executor Tool"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "id4",
+      "name": "KaliCLI",
+      "position": [
+        432,
+        464
+      ],
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{ \"status\": \"success\", \"target\": \"127.0.0.1\", \"findings\": [ { \"service\": \"http\", \"port\": 80, \"risk\": \"High\", \"details\": \"Old version\" } ], \"raw_output\": \"...\" }"
+      },
+      "id": "id5",
+      "name": "Parser",
+      "position": [
+        480,
+        80
+      ],
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.output }}",
+        "options": {
+          "systemMessage": "As a Senior Security Architect and Data Engineer, your task is to summarize security scan reports into professional Thai. \n\nWhen processing the provided technical content, adhere to these guidelines:\n1. Tone & Style: Use a professional, expert-level Thai tone. Be concise, objective, and action-oriented. Avoid archaic or overly flowery language.\n2. Structure: Organize the summary into clear sections:\n   - Executive Summary (Summary of the current state)\n   - Critical Observations (High-impact technical findings)\n   - Contextual Analysis (Differentiating between intentional vulnerabilities and actual risks)\n   - Strategic Recommendations (Prioritized actionable steps)\n3. Technical Accuracy: Maintain all technical terms (e.g., CSP, HSTS, BOLA, ASVS, CI/CD) in English where appropriate for a professional IT context.\n4. Professional Formatting: Use Markdown (bolding, tables, and lists) to ensure the summary is easily scannable.\n\nThe goal is to provide a high-level briefing that a Solution Architect can use to immediately understand the security posture and necessary next steps without reading the full raw log."
+        }
+      },
+      "id": "id6",
+      "name": "Reporter",
+      "position": [
+        624,
+        112
+      ],
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-2.5-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        128,
+        448
+      ],
+      "id": "a629dce0-79e0-4391-8ee4-37c18fe4396d",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "EDqwRIKAEHCDMQuY",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "moonshotai/kimi-k2.5",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        608,
+        448
+      ],
+      "id": "9de0c563-bd32-4678-8877-051b3eb0625b",
+      "name": "OpenRouter Chat Model1",
+      "credentials": {
+        "openRouterApi": {
+          "id": "EDqwRIKAEHCDMQuY",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const report = $input.item.json.output || \"No report content generated.\";\nconst binaryData = Buffer.from(report).toString('base64');\n\nreturn {\n  json: {\n    text: \"Report attached.\"\n  },\n  binary: {\n    data: {\n      data: binaryData,\n      mimeType: 'text/markdown',\n      fileName: 'security_report.md'\n    }\n  }\n};"
+      },
+      "id": "7a9ecff4-1852-4ab6-9f27-9ce071ec90da",
+      "name": "Create Report File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "🛡️ **Security Assessment Complete**\nThe full analysis is attached as a Markdown file.",
+        "options": {},
+        "files": {
+          "values": [
+            {}
+          ]
+        }
+      },
+      "id": "id8",
+      "name": "Discord Alert",
+      "position": [
+        1184,
+        144
+      ],
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "webhookId": "673dbd5a-1c3a-4a84-80f4-dce62a425b59",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "THnybLg0kTchFk3v",
+          "name": "Discord Webhook account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Orchestrator": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Reporter",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "index": 0,
+            "node": "Orchestrator",
+            "type": "ai_outputParser"
+          }
+        ]
+      ]
+    },
+    "Reporter": {
+      "main": [
+        [
+          {
+            "node": "Create Report File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KaliCLI": {
+      "ai_tool": [
+        [
+          {
+            "index": 0,
+            "node": "Orchestrator",
+            "type": "ai_tool"
+          }
+        ]
+      ]
+    },
+    "Trigger": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Orchestrator",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Orchestrator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Reporter",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Report File": {
+      "main": [
+        [
+          {
+            "node": "Discord Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "6933fbc8-0e38-4a4a-9671-6a31f50d5336",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "edec80f3ed858acedcbb127655268fbb6d64005c5562de14e0c198f90ecf25cb"
+  },
+  "id": "QccvLf6ux7zYvqLy",
+  "tags": []
+}
