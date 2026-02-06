@@ -1,0 +1,23 @@
+FROM bkimminich/juice-shop:latest
+
+USER root
+# Install prerequisites
+RUN apt-get update && apt-get install -y curl apt-transport-https lsb-release gnupg2
+
+# Install Wazuh Agent
+RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import && \
+    chmod 644 /usr/share/keyrings/wazuh.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | tee -a /etc/apt/sources.list.d/wazuh.list && \
+    apt-get update && \
+    apt-get install -y wazuh-agent
+
+COPY ./victim_entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Switch back to node user? Check if agent needs root. 
+# Agent needs root to start service usually, unless configured otherwise.
+# We will start agent as root in entrypoint, then drop privs or just run node app.
+# Since agent runs as background service, entrypoint can run it.
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["npm", "start"]

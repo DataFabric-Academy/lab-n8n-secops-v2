@@ -1,0 +1,13 @@
+FROM wazuh/wazuh-manager:4.7.2
+
+# Copy custom integration script
+COPY wazuh_n8n_integration.py /var/ossec/integrations/custom-n8n.py
+RUN chmod 750 /var/ossec/integrations/custom-n8n.py && \
+    chown root:wazuh /var/ossec/integrations/custom-n8n.py
+
+# Enable integration via s6-overlay init script
+COPY wazuh_manager_entrypoint.sh /etc/cont-init.d/99-n8n-integration
+RUN chmod +x /etc/cont-init.d/99-n8n-integration
+
+# Do not override ENTRYPOINT, use default /init
+

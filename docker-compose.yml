@@ -7,7 +7,7 @@ services:
   n8n:
     build:
       context: .
-      dockerfile: Dockerfile.n8n # สร้างจาก Dockerfile ที่เราทำไว้
+      dockerfile: Dockerfile.n8n
     container_name: n8n-secops
     restart: always
     ports:
@@ -19,7 +19,6 @@ services:
       - N8N_HOST=${N8N_HOST}
       - N8N_PORT=${N8N_PORT}
       - N8N_PROTOCOL=http
-      # ถ้าใช้ Tunnel แนะนำให้แก้ WEBHOOK_URL ใน .env เป็น Domain ของ Cloudflare
       - WEBHOOK_URL=${WEBHOOK_URL}
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_DATABASE=${DB_NAME}
@@ -29,7 +28,6 @@ services:
       - DB_POSTGRESDB_PASSWORD=${DB_PASS}
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
       - GENERIC_TIMEZONE=Asia/Bangkok
-      # Fix for Cloudflare Tunnel/Proxy
       - N8N_PROXY_HOPS=1
       - N8N_SECURE_COOKIE=false
     volumes:
@@ -40,20 +38,7 @@ services:
       - secops_net
 
   # ----------------------------------------
-  # 2. Victim App (เหยื่อ)
-  # ----------------------------------------
-  victim-app:
-    image: nginx:alpine
-    container_name: victim-app
-    restart: always
-    volumes:
-      # เอาไฟล์ความลับไปวางไว้หน้าบ้าน Web Server
-      - ./vulnerable_data:/usr/share/nginx/html
-    networks:
-      - secops_net
-
-  # ----------------------------------------
-  # 3. Database
+  # 2. Database
   # ----------------------------------------
   postgres:
     image: postgres:15
@@ -69,7 +54,104 @@ services:
       - secops_net
 
   # ----------------------------------------
-  # 4. Kali Linux (Attack Simulation)
+  # 3. Wazuh Stack (SIEM)
+  # ----------------------------------------
+  wazuh.indexer:
+    image: wazuh/wazuh-indexer:4.7.2
+    container_name: wazuh-indexer
+    restart: always
+    ports:
+      - "9200:9200"
+    environment:
+      - "OPENSEARCH_INITIAL_ADMIN_PASSWORD=SecretPassword123!"
+    volumes:
+      - wazuh-indexer-data:/var/lib/wazuh-indexer
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    networks:
+      - secops_net
+
+  wazuh.manager:
+    build:
+      context: .
+      dockerfile: Dockerfile.wazuh-manager
+    hostname: wazuh-manager
+    container_name: wazuh-manager
+    restart: always
+    ports:
+      - "1514:1514"
+      - "55000:55000"
+    environment:
+      - INDEXER_URL=https://wazuh-indexer:9200
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=SecretPassword123!
+    depends_on:
+      - wazuh.indexer
+    volumes:
+      - wazuh-manager-data:/var/ossec/data
+    networks:
+      - secops_net
+
+  wazuh.dashboard:
+    image: wazuh/wazuh-dashboard:4.7.2
+    container_name: wazuh-dashboard
+    restart: always
+    ports:
+      - "443:5601"
+    environment:
+      - INDEXER_URL=https://wazuh-indexer:9200
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=SecretPassword123!
+      - WAZUH_API_URL=https://wazuh-manager:55000
+    depends_on:
+      - wazuh.indexer
+      - wazuh.manager
+    networks:
+      - secops_net
+
+  # ----------------------------------------
+  # 4. Victims (Instrumented with Wazuh Agent)
+  # ----------------------------------------
+  victim-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.victim-nginx
+    container_name: victim-app
+    restart: always
+    environment:
+      - WAZUH_MANAGER=wazuh-manager
+    volumes:
+      - ./vulnerable_data:/usr/share/nginx/html
+    depends_on:
+      - wazuh.manager
+    networks:
+      - secops_net
+
+  juice-shop:
+    image: bkimminich/juice-shop
+    container_name: juice-shop-victim
+    restart: always
+    environment:
+      - WAZUH_MANAGER=wazuh-manager
+    # Agent installation skipped (Distroless)
+    networks:
+      - secops_net
+
+  metasploitable:
+    image: tleemcjr/metasploitable2
+    container_name: metasploitable-victim
+    restart: always
+    # Agents not supported on this old image
+    networks:
+      - secops_net
+
+  # ----------------------------------------
+  # 5. Kali Linux (Attack Simulation)
   # ----------------------------------------
   kali:
     build:
@@ -81,7 +163,7 @@ services:
       - secops_net
 
   # ----------------------------------------
-  # 5. Cloudflare Tunnel (Revised)
+  # 6. Cloudflare Tunnel
   # ----------------------------------------
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -93,29 +175,11 @@ services:
     networks:
       - secops_net
 
-  # ----------------------------------------
-  # 6. OWASP Juice Shop (Victim)
-  # ----------------------------------------
-  juice-shop:
-    image: bkimminich/juice-shop
-    container_name: juice-shop-victim
-    restart: always
-    networks:
-      - secops_net
-
-  # ----------------------------------------
-  # 7. Metasploitable 2 (Victim)
-  # ----------------------------------------
-  metasploitable:
-    image: tleemcjr/metasploitable2
-    container_name: metasploitable-victim
-    restart: always
-    networks:
-      - secops_net
-
 volumes:
   n8n_data:
   postgres_data:
+  wazuh-indexer-data:
+  wazuh-manager-data:
 
 
 networks:

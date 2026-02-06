@@ -1,0 +1,18 @@
+FROM nginx:latest
+
+# Install required packages
+RUN apt-get update && apt-get install -y curl apt-transport-https lsb-release gnupg2
+
+# Install Wazuh Agent
+RUN curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import && \
+    chmod 644 /usr/share/keyrings/wazuh.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | tee -a /etc/apt/sources.list.d/wazuh.list && \
+    apt-get update && \
+    apt-get install -y wazuh-agent
+
+# Entrypoint script to register and start agent
+COPY ./victim_entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
