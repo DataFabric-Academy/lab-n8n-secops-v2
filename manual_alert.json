@@ -1,0 +1,31 @@
+{
+    "timestamp": "2024-02-06T12:34:56.789+0000",
+    "rule": {
+        "level": 10,
+        "description": "Test Alert from Manual Trigger",
+        "id": "100001",
+        "firedtimes": 1,
+        "mail": false,
+        "groups": [
+            "test"
+        ]
+    },
+    "agent": {
+        "id": "000",
+        "name": "wazuh-manager",
+        "ip": "127.0.0.1"
+    },
+    "manager": {
+        "name": "wazuh-manager"
+    },
+    "id": "123456789",
+    "full_log": "This is a test log message manually triggered.",
+    "decoder": {
+        "name": "test-decoder"
+    },
+    "data": {
+        "srcip": "192.168.1.100",
+        "dstport": "80"
+    },
+    "location": "/var/log/test.log"
+}
